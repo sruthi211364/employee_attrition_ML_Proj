@@ -1,0 +1,12 @@
+# Table of contents
+# Learn more at https://jupyterbook.org/customize/toc.html
+
+format: jb-book
+root: intro
+chapters:
+- file: markdown.md
+- file: employee_attrition.ipynb
+- file: datasets
+- file: artifacts
+- file: resume
+- file: resume.md

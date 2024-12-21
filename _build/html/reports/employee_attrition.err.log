@@ -1,0 +1,208 @@
+Traceback (most recent call last):
+  File "C:\Users\anchu\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\jupyter_cache\executors\utils.py", line 58, in single_nb_execution
+    executenb(
+  File "C:\Users\anchu\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\nbclient\client.py", line 1319, in execute
+    return NotebookClient(nb=nb, resources=resources, km=km, **kwargs).execute()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\anchu\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\jupyter_core\utils\__init__.py", line 165, in wrapped
+    return loop.run_until_complete(inner)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Program Files\WindowsApps\PythonSoftwareFoundation.Python.3.11_3.11.2544.0_x64__qbz5n2kfra8p0\Lib\asyncio\base_events.py", line 654, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\anchu\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\nbclient\client.py", line 709, in async_execute
+    await self.async_execute_cell(
+  File "C:\Users\anchu\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\nbclient\client.py", line 1062, in async_execute_cell
+    await self._check_raise_for_error(cell, cell_index, exec_reply)
+  File "C:\Users\anchu\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.11_qbz5n2kfra8p0\LocalCache\local-packages\Python311\site-packages\nbclient\client.py", line 918, in _check_raise_for_error
+    raise CellExecutionError.from_cell_and_msg(cell, exec_reply_content)
+nbclient.exceptions.CellExecutionError: An error occurred while executing the following cell:
+------------------
+#Now creating a normalized 3nf database using employee attrition data.
+
+# Now loading the dataset into the database by creating a 3nf tables.
+file_path = "C:/Users/anchu/ML_Project_Python/datasets/employee_attrition.csv"
+employee_attrition_data = pd.read_csv(file_path)
+
+# Establish a connection to SQLite and create a database
+connection = sqlite3.connect("employee_attrition.db")
+cursor = connection.cursor() #Now creating a cursor using a connection that is established.
+
+# Now creating the tables based on the similarities of the columns.
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS Education (
+    EducationFieldID INTEGER PRIMARY KEY AUTOINCREMENT,
+    EducationField TEXT NOT NULL
+);
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS MaritalStatus (
+    MaritalStatusID INTEGER PRIMARY KEY AUTOINCREMENT,
+    MaritalStatus TEXT NOT NULL
+);
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS Job (
+    JobRoleID INTEGER PRIMARY KEY AUTOINCREMENT,
+    JobRole TEXT NOT NULL,
+    Department TEXT NOT NULL,
+    JobLevel INTEGER NOT NULL
+);
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS Employee (
+    EmployeeID INTEGER PRIMARY KEY,
+    Age INTEGER NOT NULL,
+    Gender TEXT NOT NULL,
+    DistanceFromHome INTEGER NOT NULL,
+    EducationFieldID INTEGER NOT NULL,
+    MaritalStatusID INTEGER NOT NULL,
+    JobRoleID INTEGER NOT NULL,
+    FOREIGN KEY (EducationFieldID) REFERENCES Education(EducationFieldID),
+    FOREIGN KEY (MaritalStatusID) REFERENCES MaritalStatus(MaritalStatusID),
+    FOREIGN KEY (JobRoleID) REFERENCES Job(JobRoleID)
+);
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS EmployeeMetrics (
+    MetricID INTEGER PRIMARY KEY AUTOINCREMENT,
+    EmployeeID INTEGER NOT NULL,
+    EnvironmentSatisfaction INTEGER NOT NULL,
+    JobSatisfaction INTEGER NOT NULL,
+    WorkLifeBalance INTEGER NOT NULL,
+    StockOptionLevel INTEGER NOT NULL,
+    TotalWorkingYears INTEGER NOT NULL,
+    YearsAtCompany INTEGER NOT NULL,
+    YearsInCurrentRole INTEGER NOT NULL,
+    NumCompaniesWorked INTEGER NOT NULL,
+    PercentSalaryHike INTEGER NOT NULL,
+    DailyRate REAL NOT NULL,
+    MonthlyIncome REAL NOT NULL,
+    FOREIGN KEY (EmployeeID) REFERENCES Employee(EmployeeID)
+);
+""")
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS Attrition (
+    AttritionID INTEGER PRIMARY KEY AUTOINCREMENT,
+    EmployeeID INTEGER NOT NULL,
+    Attrition TEXT NOT NULL,
+    FOREIGN KEY (EmployeeID) REFERENCES Employee(EmployeeID)
+);
+""")
+
+# Insert unique values into lookup tables
+education_fields = employee_attrition_data['EducationField'].unique()
+marital_statuses = employee_attrition_data['MaritalStatus'].unique()
+job_roles = employee_attrition_data[['JobRole', 'Department', 'JobLevel']].drop_duplicates()
+
+cursor.executemany("INSERT INTO Education (EducationField) VALUES (?);", [(field,) for field in education_fields])
+cursor.executemany("INSERT INTO MaritalStatus (MaritalStatus) VALUES (?);", [(status,) for status in marital_statuses])
+cursor.executemany(
+    "INSERT INTO Job (JobRole, Department, JobLevel) VALUES (?, ?, ?);",
+    job_roles.values.tolist()
+)
+
+# Commit the changes
+connection.commit()
+
+# Map lookup table IDs to the main dataset
+education_mapping = {row[1]: row[0] for row in cursor.execute("SELECT * FROM Education").fetchall()}
+marital_status_mapping = {row[1]: row[0] for row in cursor.execute("SELECT * FROM MaritalStatus").fetchall()}
+job_mapping = {
+    (row[1], row[2], row[3]): row[0]
+    for row in cursor.execute("SELECT * FROM Job").fetchall()
+}
+
+# Prepare data for Employee table
+employee_data = [
+    (
+        row['EmployeeNumber'],
+        row['Age'],
+        row['Gender'],
+        row['DistanceFromHome'],
+        education_mapping[row['EducationField']],
+        marital_status_mapping[row['MaritalStatus']],
+        job_mapping[(row['JobRole'], row['Department'], row['JobLevel'])]
+    )
+    for _, row in employee_attrition_data.iterrows()
+]
+
+cursor.executemany(
+    "INSERT INTO Employee (EmployeeID, Age, Gender, DistanceFromHome, EducationFieldID, MaritalStatusID, JobRoleID) VALUES (?, ?, ?, ?, ?, ?, ?);",
+    employee_data
+)
+
+# Prepare data for EmployeeMetrics table
+employee_metrics_data = [
+    (
+        row['EmployeeNumber'],
+        row['EnvironmentSatisfaction'],
+        row['JobSatisfaction'],
+        row['WorkLifeBalance'],
+        row['StockOptionLevel'],
+        row['TotalWorkingYears'],
+        row['YearsAtCompany'],
+        row['YearsInCurrentRole'],
+        row['NumCompaniesWorked'],
+        row['PercentSalaryHike'],
+        row['DailyRate'],
+        row['MonthlyIncome']
+    )
+    for _, row in employee_attrition_data.iterrows()
+]
+
+cursor.executemany(
+    "INSERT INTO EmployeeMetrics (EmployeeID, EnvironmentSatisfaction, JobSatisfaction, WorkLifeBalance, StockOptionLevel, TotalWorkingYears, YearsAtCompany, YearsInCurrentRole, NumCompaniesWorked, PercentSalaryHike, DailyRate, MonthlyIncome) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);",
+    employee_metrics_data
+)
+
+# Prepare data for Attrition table
+attrition_data = [
+    (row['EmployeeNumber'], row['Attrition'])
+    for _, row in employee_attrition_data.iterrows()
+]
+
+cursor.executemany(
+    "INSERT INTO Attrition (EmployeeID, Attrition) VALUES (?, ?);",
+    attrition_data
+)
+
+# Commit all changes
+connection.commit()
+print("Database populated successfully.")
+
+# Close the connection
+connection.close()
+
+------------------
+
+
+[1;31m---------------------------------------------------------------------------[0m
+[1;31mIntegrityError[0m                            Traceback (most recent call last)
+Cell [1;32mIn[2], line 115[0m
+[0;32m    101[0m [38;5;66;03m# Prepare data for Employee table[39;00m
+[0;32m    102[0m employee_data [38;5;241m=[39m [
+[0;32m    103[0m     (
+[0;32m    104[0m         row[[38;5;124m'[39m[38;5;124mEmployeeNumber[39m[38;5;124m'[39m],
+[1;32m   (...)[0m
+[0;32m    112[0m     [38;5;28;01mfor[39;00m _, row [38;5;129;01min[39;00m employee_attrition_data[38;5;241m.[39miterrows()
+[0;32m    113[0m ]
+[1;32m--> 115[0m [43mcursor[49m[38;5;241;43m.[39;49m[43mexecutemany[49m[43m([49m
+[0;32m    116[0m [43m    [49m[38;5;124;43m"[39;49m[38;5;124;43mINSERT INTO Employee (EmployeeID, Age, Gender, DistanceFromHome, EducationFieldID, MaritalStatusID, JobRoleID) VALUES (?, ?, ?, ?, ?, ?, ?);[39;49m[38;5;124;43m"[39;49m[43m,[49m
+[0;32m    117[0m [43m    [49m[43memployee_data[49m
+[0;32m    118[0m [43m)[49m
+[0;32m    120[0m [38;5;66;03m# Prepare data for EmployeeMetrics table[39;00m
+[0;32m    121[0m employee_metrics_data [38;5;241m=[39m [
+[0;32m    122[0m     (
+[0;32m    123[0m         row[[38;5;124m'[39m[38;5;124mEmployeeNumber[39m[38;5;124m'[39m],
+[1;32m   (...)[0m
+[0;32m    136[0m     [38;5;28;01mfor[39;00m _, row [38;5;129;01min[39;00m employee_attrition_data[38;5;241m.[39miterrows()
+[0;32m    137[0m ]
+
+[1;31mIntegrityError[0m: UNIQUE constraint failed: Employee.EmployeeID
+
